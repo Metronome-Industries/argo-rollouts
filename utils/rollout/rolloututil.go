@@ -248,5 +248,13 @@ func ShouldVerifyWeight(ro *v1alpha1.Rollout, desiredWeight int32) bool {
 	shouldVerifyWeight := (ro.Status.StableRS != "" && !IsFullyPromoted(ro) && currentStep != nil && currentStep.SetWeight != nil) ||
 		(ro.Status.StableRS != "" && !IsFullyPromoted(ro) && currentStep == nil && desiredWeight == weightutil.MaxTrafficWeight(ro)) // We are at end of rollout
 
+	// Also verify when resetting weight to 0 during a mid-rollout restart. The previous
+	// canary had traffic (Weight > 0) and we need to confirm the load balancer has actually
+	// applied weight=0 before allowing service selector changes that would drain the old targets.
+	if !shouldVerifyWeight && desiredWeight == 0 && ro.Status.StableRS != "" && !IsFullyPromoted(ro) &&
+		ro.Status.Canary.Weights != nil && ro.Status.Canary.Weights.Canary.Weight > 0 {
+		shouldVerifyWeight = true
+	}
+
 	return shouldVerifyWeight
 }

@@ -381,6 +381,9 @@ func (c *rolloutContext) isReplicaSetReferenced(rs *appsv1.ReplicaSet) bool {
 	var servicesToCheck []string
 	if ro.Spec.Strategy.Canary != nil {
 		servicesToCheck = []string{ro.Spec.Strategy.Canary.CanaryService, ro.Spec.Strategy.Canary.StableService}
+		if ro.Spec.Strategy.Canary.PingPong != nil {
+			servicesToCheck = append(servicesToCheck, ro.Spec.Strategy.Canary.PingPong.PingService, ro.Spec.Strategy.Canary.PingPong.PongService)
+		}
 	} else {
 		servicesToCheck = []string{ro.Spec.Strategy.BlueGreen.ActiveService, ro.Spec.Strategy.BlueGreen.PreviewService}
 	}
