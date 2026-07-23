@@ -247,6 +247,21 @@ func (c *rolloutContext) getPreviewAndActiveServices() (*corev1.Service, *corev1
 func (c *rolloutContext) reconcilePingAndPongService() error {
 	if trafficrouting.IsPingPongEnabled(c.rollout) && !rolloututils.IsFullyPromoted(c.rollout) {
 		_, canaryService := trafficrouting.GetStableAndCanaryServices(c.rollout, true)
+		var newRSHash string
+		var newRSAvailable int32
+		if c.newRS != nil {
+			newRSHash = c.newRS.Labels[v1alpha1.DefaultRolloutUniqueLabelKey]
+			newRSAvailable = c.newRS.Status.AvailableReplicas
+		}
+		// Do not switch the ping/pong service selector to a RS with no available replicas.
+		// Doing so causes the old targets to drain from the ALB target group while the new
+		// targets are not yet registered, resulting in 503s if any traffic is still routed
+		// to that target group.
+		if c.newRS == nil || c.newRS.Status.AvailableReplicas == 0 {
+			c.log.Infof("delaying ping/pong service switch of '%s' to RS hash=%s: new RS has no available replicas", canaryService, newRSHash)
+			return nil
+		}
+		c.log.Infof("reconcilePingAndPongService: switching '%s' to RS hash=%s (availableReplicas=%d)", canaryService, newRSHash, newRSAvailable)
 		return c.ensureSVCTargets(canaryService, c.newRS, false)
 	}
 	return nil

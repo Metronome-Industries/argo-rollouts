@@ -20,6 +20,7 @@ import (
 func (c *rolloutContext) rolloutCanary() error {
 	var err error
 	if replicasetutil.PodTemplateOrStepsChanged(c.rollout, c.newRS) {
+		c.log.Infof("PodTemplateOrStepsChanged detected, resetting (status.Canary.Weights: %v)", c.rollout.Status.Canary.Weights)
 		c.newRS, err = c.getAllReplicaSetsAndSyncRevision()
 		if err != nil {
 			return fmt.Errorf("failed to getAllReplicaSetsAndSyncRevision in rolloutCanary with PodTemplateOrStepsChanged: %w", err)
@@ -351,7 +352,9 @@ func (c *rolloutContext) syncRolloutStatusCanary() error {
 
 	newStatus.Canary.StablePingPong = c.rollout.Status.Canary.StablePingPong
 	newStatus.Canary.StepPluginStatuses = c.rollout.Status.Canary.StepPluginStatuses
-	newStatus.Canary.Weights = c.rollout.Status.Canary.Weights
+	if newStatus.Canary.Weights == nil {
+		newStatus.Canary.Weights = c.rollout.Status.Canary.Weights
+	}
 	c.stepPluginContext.updateStatus(&newStatus)
 
 	currentStep, currentStepIndex := replicasetutil.GetCurrentCanaryStep(c.rollout)
@@ -361,6 +364,7 @@ func (c *rolloutContext) syncRolloutStatusCanary() error {
 
 	if replicasetutil.PodTemplateOrStepsChanged(c.rollout, c.newRS) {
 		c.resetRolloutStatus(&newStatus)
+		c.log.Infof("syncRolloutStatusCanary: persisting reset status with Canary.Weights=%v", newStatus.Canary.Weights)
 		if c.newRS != nil && stepCount > 0 {
 			if c.rollout.Status.StableRS == replicasetutil.GetPodTemplateHash(c.newRS) {
 				// If we get here, we detected that we've moved back to the stable ReplicaSet

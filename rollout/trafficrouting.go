@@ -294,8 +294,14 @@ func (c *rolloutContext) reconcileTrafficRouting() error {
 		// is actually applied on the load balancer before allowing further reconciliation,
 		// to prevent 503s from switching service selectors or scaling down the old RS while
 		// traffic is still being routed to the canary target group.
+		var newRSAvailable int32
+		if c.newRS != nil {
+			newRSAvailable = c.newRS.Status.AvailableReplicas
+		}
 		resettingWeightToZero := (c.newRS == nil || c.newRS.Status.AvailableReplicas == 0) &&
 			c.rollout.Status.Canary.Weights != nil && c.rollout.Status.Canary.Weights.Canary.Weight > 0
+		c.log.Infof("resettingWeightToZero=%v (newRS==nil: %v, newRS.AvailableReplicas: %d, status.Canary.Weights: %v)",
+			resettingWeightToZero, c.newRS == nil, newRSAvailable, c.rollout.Status.Canary.Weights)
 
 		// If there was a previous canary weight > 0 and the new canary has no available
 		// replicas, we must reset the weight to 0 BEFORE updating the hash. Otherwise,
@@ -329,6 +335,7 @@ func (c *rolloutContext) reconcileTrafficRouting() error {
 		}
 
 		weightVerified, err := reconciler.VerifyWeight(desiredWeight, weightDestinations...)
+		c.log.Infof("VerifyWeight result: verified=%v, err=%v, resettingWeightToZero=%v", weightVerified, err, resettingWeightToZero)
 		c.newStatus.Canary.Weights.Verified = weightVerified
 		if err != nil {
 			c.recorder.Warnf(c.rollout, record.EventOptions{EventReason: conditions.WeightVerifyErrorReason}, conditions.WeightVerifyErrorMessage, err)
