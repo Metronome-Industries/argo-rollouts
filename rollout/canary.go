@@ -351,6 +351,7 @@ func (c *rolloutContext) syncRolloutStatusCanary() error {
 
 	newStatus.Canary.StablePingPong = c.rollout.Status.Canary.StablePingPong
 	newStatus.Canary.StepPluginStatuses = c.rollout.Status.Canary.StepPluginStatuses
+	newStatus.Canary.Weights = c.rollout.Status.Canary.Weights
 	c.stepPluginContext.updateStatus(&newStatus)
 
 	currentStep, currentStepIndex := replicasetutil.GetCurrentCanaryStep(c.rollout)
