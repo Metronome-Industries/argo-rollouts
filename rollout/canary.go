@@ -56,15 +56,15 @@ func (c *rolloutContext) rolloutCanary() error {
 		return err
 	}
 
+	if err := c.reconcileTrafficRouting(); err != nil {
+		return err
+	}
+
 	if err := c.reconcilePingAndPongService(); err != nil {
 		return err
 	}
 
 	if err := c.reconcileStableAndCanaryService(); err != nil {
-		return err
-	}
-
-	if err := c.reconcileTrafficRouting(); err != nil {
 		return err
 	}
 
