@@ -18,6 +18,7 @@ import (
 	"github.com/argoproj/argo-rollouts/utils/defaults"
 	logutil "github.com/argoproj/argo-rollouts/utils/log"
 	replicasetutil "github.com/argoproj/argo-rollouts/utils/replicaset"
+	rolloututil "github.com/argoproj/argo-rollouts/utils/rollout"
 	serviceutil "github.com/argoproj/argo-rollouts/utils/service"
 	timeutil "github.com/argoproj/argo-rollouts/utils/time"
 )
@@ -381,7 +382,7 @@ func (c *rolloutContext) isReplicaSetReferenced(rs *appsv1.ReplicaSet) bool {
 	var servicesToCheck []string
 	if ro.Spec.Strategy.Canary != nil {
 		servicesToCheck = []string{ro.Spec.Strategy.Canary.CanaryService, ro.Spec.Strategy.Canary.StableService}
-		if ro.Spec.Strategy.Canary.PingPong != nil {
+		if ro.Spec.Strategy.Canary.PingPong != nil && !rolloututil.IsFullyPromoted(ro) {
 			servicesToCheck = append(servicesToCheck, ro.Spec.Strategy.Canary.PingPong.PingService, ro.Spec.Strategy.Canary.PingPong.PongService)
 		}
 	} else {
