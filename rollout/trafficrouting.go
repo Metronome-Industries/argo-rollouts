@@ -289,14 +289,27 @@ func (c *rolloutContext) reconcileTrafficRouting() error {
 			}
 		}
 
+		// Track whether we are resetting canary weight from >0 to 0 during a mid-rollout
+		// restart (new RS has no available replicas). In this case we must verify the weight
+		// is actually applied on the load balancer before allowing further reconciliation,
+		// to prevent 503s from switching service selectors or scaling down the old RS while
+		// traffic is still being routed to the canary target group.
+		var newRSAvailable int32
+		if c.newRS != nil {
+			newRSAvailable = c.newRS.Status.AvailableReplicas
+		}
+		resettingWeightToZero := (c.newRS == nil || c.newRS.Status.AvailableReplicas == 0) &&
+			c.rollout.Status.Canary.Weights != nil && c.rollout.Status.Canary.Weights.Canary.Weight > 0
+		c.log.Infof("resettingWeightToZero=%v (newRS==nil: %v, newRS.AvailableReplicas: %d, status.Canary.Weights: %v)",
+			resettingWeightToZero, c.newRS == nil, newRSAvailable, c.rollout.Status.Canary.Weights)
+
 		// If there was a previous canary weight > 0 and the new canary has no available
 		// replicas, we must reset the weight to 0 BEFORE updating the hash. Otherwise,
 		// UpdateHash will point the destination rule to the new (empty) canary while the
 		// old weight is still in effect, routing traffic to non-existent pods.
 		// This runs after checkReplicasAvailable so we only reset when stable can handle
 		// the full traffic load.
-		if (c.newRS == nil || c.newRS.Status.AvailableReplicas == 0) &&
-			c.rollout.Status.Canary.Weights != nil && c.rollout.Status.Canary.Weights.Canary.Weight > 0 {
+		if resettingWeightToZero {
 			if err := reconciler.SetWeight(desiredWeight, weightDestinations...); err != nil {
 				c.recorder.Warnf(c.rollout, record.EventOptions{EventReason: "TrafficRoutingError"}, err.Error())
 				return err
@@ -322,6 +335,7 @@ func (c *rolloutContext) reconcileTrafficRouting() error {
 		}
 
 		weightVerified, err := reconciler.VerifyWeight(desiredWeight, weightDestinations...)
+		c.log.Infof("VerifyWeight result: verified=%v, err=%v, resettingWeightToZero=%v", weightVerified, err, resettingWeightToZero)
 		c.newStatus.Canary.Weights.Verified = weightVerified
 		if err != nil {
 			c.recorder.Warnf(c.rollout, record.EventOptions{EventReason: conditions.WeightVerifyErrorReason}, conditions.WeightVerifyErrorMessage, err)
@@ -343,6 +357,9 @@ func (c *rolloutContext) reconcileTrafficRouting() error {
 				logCtx := logutil.WithRollout(c.rollout)
 				logCtx.Info("rollout enqueue due to trafficrouting")
 				c.enqueueRolloutAfter(c.rollout, defaults.GetRolloutVerifyRetryInterval())
+				if resettingWeightToZero {
+					return fmt.Errorf("canary weight reset to 0 not yet verified, blocking further reconciliation to prevent 503s")
+				}
 				// At the end of the rollout we need to verify the weight is correct, and return an error if not because we don't want the rest of the
 				// reconcile process to continue. We don't need to do this if we are in the middle of the rollout because the rest of the reconcile
 				// process won't scale down the old replicasets yet due to being in the middle of some steps.
