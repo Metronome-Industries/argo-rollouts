@@ -1,0 +1,24 @@
+version: 2.1
+
+orbs:
+  metronome: metronome/metronome@0.8
+
+workflows:
+  build-and-publish:
+    jobs:
+      - metronome/build_and_push_docker:
+          name: publish-docker-arm64
+          resource_class: arm.medium
+          repo: argo-rollouts
+
+      - metronome/build_and_push_docker:
+          name: publish-docker-amd64
+          resource_class: medium
+          repo: argo-rollouts
+
+      - metronome/create_docker_manifest:
+          name: publish-docker-manifest
+          repo: argo-rollouts
+          requires:
+            - publish-docker-arm64
+            - publish-docker-amd64
